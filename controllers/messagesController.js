@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
+
 import { users } from './usersController.js';
 
-const messages = [];
+let messages = [];
 
 const secret = 'my   secret   key';
 

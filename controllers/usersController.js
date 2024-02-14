@@ -1,16 +1,26 @@
+import fs from 'fs';
+
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
+export let users = [];
+
 const secret = 'my   secret   key';
-export const users = [];
+const fileExists = fs.existsSync('users.json');
 
 export const getUsers = async (req, res) => {
-  const usersWithoutPassword = users.map((user) => {
-    const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
-  });
-
-  res.status(200).json(usersWithoutPassword);
+  if (fileExists) {
+    const data = fs.readFileSync('users.json');
+    const usersFromDatabase = JSON.parse(data);
+    users = [...usersFromDatabase];
+    const usersWithoutPassword = users.map((user) => {
+      const { password, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    });
+    res.status(200).json(usersWithoutPassword);
+  } else {
+    res.status(404).json({ error: 'No users found' });
+  }
 };
 
 export const addUser = async (req, res) => {
@@ -38,15 +48,25 @@ export const addUser = async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, 12);
 
-  const userExists = users.find((user) => user.name === name);
-  if (userExists) {
-    res.status(400).json({ error: 'User name is already taken' });
-    return;
-  }
-
   const userId = crypto.randomUUID();
   let newUser = { id: userId, name, password: hashedPassword };
-  users.push(newUser);
+
+  if (fileExists) {
+    const data = fs.readFileSync('users.json');
+    const usersFromDatabase = JSON.parse(data);
+    const userExists = usersFromDatabase.find((user) => user.name === name);
+    if (userExists) {
+      res.status(400).json({ error: 'User name is already taken' });
+      return;
+    }
+    users = [...usersFromDatabase, newUser];
+    usersFromDatabase.push(newUser);
+    console.log(usersFromDatabase);
+    fs.writeFileSync('users.json', JSON.stringify(usersFromDatabase));
+  } else {
+    users.push(newUser);
+    fs.writeFileSync('users.json', JSON.stringify([newUser]));
+  }
 
   const newUserWithoutPassword = { ...newUser };
   delete newUserWithoutPassword.password;
