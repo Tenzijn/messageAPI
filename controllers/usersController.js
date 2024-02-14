@@ -61,7 +61,6 @@ export const addUser = async (req, res) => {
     }
     users = [...usersFromDatabase, newUser];
     usersFromDatabase.push(newUser);
-    console.log(usersFromDatabase);
     fs.writeFileSync('users.json', JSON.stringify(usersFromDatabase));
   } else {
     users.push(newUser);
@@ -76,6 +75,12 @@ export const addUser = async (req, res) => {
 
 export const login = async (req, res) => {
   const { name, password } = req.body;
+
+  if (fileExists) {
+    const data = fs.readFileSync('users.json');
+    const usersFromDatabase = JSON.parse(data);
+    users = [...usersFromDatabase];
+  }
 
   if (!name || !password) {
     res

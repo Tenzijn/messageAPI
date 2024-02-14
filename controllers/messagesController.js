@@ -1,3 +1,5 @@
+import fs from 'fs';
+
 import jwt from 'jsonwebtoken';
 
 import { users } from './usersController.js';
@@ -6,17 +8,26 @@ let messages = [];
 
 const secret = 'my   secret   key';
 
+const fileExists = fs.existsSync('messages.json');
+
 export const getAllMessages = async (req, res) => {
   const sessionToken = req.headers.authorization.split(' ')[1];
   const decodedToken = jwt.verify(sessionToken, secret);
 
-  const userMessages = messages.filter(
-    (message) =>
-      message.senderID === decodedToken.id ||
-      message.receiverID === decodedToken.id
-  );
+  if (fileExists) {
+    const data = fs.readFileSync('messages.json');
+    const messagesFromDatabase = JSON.parse(data);
+    messages = [...messagesFromDatabase];
 
-  res.status(200).json(userMessages);
+    const userMessages = messages.filter(
+      (message) =>
+        message.senderID === decodedToken.id ||
+        message.receiverID === decodedToken.id
+    );
+    res.status(200).json(userMessages);
+  } else {
+    res.status(404).json({ error: 'No messages found' });
+  }
 };
 
 export const sendMessage = async (req, res) => {
@@ -49,6 +60,16 @@ export const sendMessage = async (req, res) => {
   const newMessage = { id: messageId, senderID, receiverID, message };
   messages.push(newMessage);
 
+  //adding message to external file
+  if (fileExists) {
+    const data = fs.readFileSync('messages.json');
+    const messagesFromDatabase = JSON.parse(data);
+    messages = [...messagesFromDatabase, newMessage];
+  } else {
+    messages = [newMessage];
+    fs.writeFileSync('messages.json', JSON.stringify(messages));
+  }
+
   res.status(201).json(newMessage);
 };
 
@@ -58,9 +79,14 @@ export const updateMessage = async (req, res) => {
   const sessionToken = req.headers.authorization.split(' ')[1];
   const decodedToken = jwt.verify(sessionToken, secret);
   const senderID = decodedToken.id;
-  const messageToUpdate = messages.find(
-    (message) => message.id === Number(messageId)
-  );
+
+  if (fileExists) {
+    const data = fs.readFileSync('messages.json');
+    const messagesFromDatabase = JSON.parse(data);
+    messages = [...messagesFromDatabase];
+  }
+
+  const messageToUpdate = messages.find((message) => message.id === messageId);
 
   if (!message) {
     res.status(400).json({ error: 'You must provide a message' });
@@ -76,6 +102,8 @@ export const updateMessage = async (req, res) => {
     res.status(404).json({ error: 'Message not found' });
     return;
   }
+  console.log(messageToUpdate.senderID);
+  console.log(senderID);
 
   if (messageToUpdate.senderID !== senderID) {
     res.status(403).json({ error: 'You can not update this message' });
@@ -83,6 +111,7 @@ export const updateMessage = async (req, res) => {
   }
 
   messageToUpdate.message = message;
+  fs.writeFileSync('messages.json', JSON.stringify(messages));
   res.status(200).json(messageToUpdate);
 };
 
@@ -91,6 +120,12 @@ export const deleteMessage = async (req, res) => {
   const sessionToken = req.headers.authorization.split(' ')[1];
   const decodedToken = jwt.verify(sessionToken, secret);
   const senderID = decodedToken.id;
+
+  if (fileExists) {
+    const data = fs.readFileSync('messages.json');
+    const messagesFromDatabase = JSON.parse(data);
+    messages = [...messagesFromDatabase];
+  }
   const messageToDelete = messages.find(
     (message) => message.id === Number(messageId)
   );
@@ -107,6 +142,7 @@ export const deleteMessage = async (req, res) => {
 
   const messageIndex = messages.indexOf(messageToDelete);
   messages.splice(messageIndex, 1);
+  fs.writeFileSync('messages.json', JSON.stringify(messages));
   res
     .status(200)
     .json({ message: `MessageID:  ${messageToDelete.id} deleted ` });
