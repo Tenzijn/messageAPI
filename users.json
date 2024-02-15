@@ -13,5 +13,10 @@
     "id": "fe00ee0a-16a1-4764-8f1f-3d31611d6b8e",
     "name": "Tenzin1",
     "password": "$2b$12$ALsfj.haWbnaWxF5lclq6eDjzM5lOOBavh40j.w2GpP5rSE6FEfqe"
+  },
+  {
+    "id": "5b1cc422-84d9-49a2-b51e-c7a1ed3d8013",
+    "name": "Namgyal",
+    "password": "$2b$12$3vy9IxogUPgz8EWR/8RYSu0JgmcQQn5k5ef9GyaBcGk7d/nmbEpoe"
   }
 ]

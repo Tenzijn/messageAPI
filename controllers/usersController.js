@@ -8,20 +8,35 @@ export let users = [];
 const secret = 'my   secret   key';
 const fileExists = fs.existsSync('users.json');
 
+if (fileExists) {
+  const data = fs.readFileSync('users.json');
+  const usersFromDatabase = JSON.parse(data);
+  users = [...usersFromDatabase];
+}
+
+/******************* GET ALL USERS ******************
+ *
+ * Displaying all users
+ *
+ * */
+
 export const getUsers = async (req, res) => {
-  if (fileExists) {
-    const data = fs.readFileSync('users.json');
-    const usersFromDatabase = JSON.parse(data);
-    users = [...usersFromDatabase];
-    const usersWithoutPassword = users.map((user) => {
-      const { password, ...userWithoutPassword } = user;
-      return userWithoutPassword;
-    });
-    res.status(200).json(usersWithoutPassword);
-  } else {
+  if (!fileExists) {
     res.status(404).json({ error: 'No users found' });
+    return;
   }
+  const usersWithoutPassword = users.map((user) => {
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
+  });
+  res.status(200).json(usersWithoutPassword);
 };
+
+/******************* ADD USER ******************
+ *
+ * Adding a new user by providing the name and password
+ *
+ * */
 
 export const addUser = async (req, res) => {
   const { name, password } = req.body;
@@ -47,40 +62,32 @@ export const addUser = async (req, res) => {
   }
 
   const hashedPassword = await bcrypt.hash(password, 12);
-
   const userId = crypto.randomUUID();
-  let newUser = { id: userId, name, password: hashedPassword };
+  const newUser = { id: userId, name, password: hashedPassword };
+  const userExists = users.find((user) => user.name === name);
+  if (userExists)
+    return res.status(400).json({ error: 'User name is already taken' });
 
-  if (fileExists) {
-    const data = fs.readFileSync('users.json');
-    const usersFromDatabase = JSON.parse(data);
-    const userExists = usersFromDatabase.find((user) => user.name === name);
-    if (userExists) {
-      res.status(400).json({ error: 'User name is already taken' });
-      return;
-    }
-    users = [...usersFromDatabase, newUser];
-    usersFromDatabase.push(newUser);
-    fs.writeFileSync('users.json', JSON.stringify(usersFromDatabase));
-  } else {
+  if (!fileExists) {
     users.push(newUser);
     fs.writeFileSync('users.json', JSON.stringify([newUser]));
+    return;
   }
 
+  users.push(newUser);
+  fs.writeFileSync('users.json', JSON.stringify(users));
   const newUserWithoutPassword = { ...newUser };
   delete newUserWithoutPassword.password;
-
   res.status(201).json(newUserWithoutPassword);
 };
 
+/******************* LOGIN ******************
+ *
+ * Logging in a user by providing the name and password
+ *
+ * */
 export const login = async (req, res) => {
   const { name, password } = req.body;
-
-  if (fileExists) {
-    const data = fs.readFileSync('users.json');
-    const usersFromDatabase = JSON.parse(data);
-    users = [...usersFromDatabase];
-  }
 
   if (!name || !password) {
     res
