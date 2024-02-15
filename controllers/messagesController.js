@@ -1,10 +1,11 @@
 import fs from 'fs';
 
 import jwt from 'jsonwebtoken';
-
 import { users } from './usersController.js';
 
 let messages = [];
+
+console.log('users in messages', users);
 
 const secret = 'my   secret   key';
 
@@ -35,6 +36,13 @@ export const sendMessage = async (req, res) => {
   const sessionToken = req.headers.authorization.split(' ')[1];
   const decodedToken = jwt.verify(sessionToken, secret);
   const senderID = decodedToken.id;
+
+  if (fileExists) {
+    const data = fs.readFileSync('messages.json');
+    const messagesFromDatabase = JSON.parse(data);
+    messages = [...messagesFromDatabase];
+  }
+
   if (!receiverID || !message) {
     res
       .status(400)
@@ -61,14 +69,7 @@ export const sendMessage = async (req, res) => {
   messages.push(newMessage);
 
   //adding message to external file
-  if (fileExists) {
-    const data = fs.readFileSync('messages.json');
-    const messagesFromDatabase = JSON.parse(data);
-    messages = [...messagesFromDatabase, newMessage];
-  } else {
-    messages = [newMessage];
-    fs.writeFileSync('messages.json', JSON.stringify(messages));
-  }
+  fs.writeFileSync('messages.json', JSON.stringify(messages));
 
   res.status(201).json(newMessage);
 };
