@@ -1,18 +1,12 @@
-import fs from 'fs';
+import client from '../db/db_connection.js';
 
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
-export let users = [];
+const db = client.db('messagingApp');
+const usersCollection = db.collection('users');
 
 const secret = 'my   secret   key';
-const fileExists = fs.existsSync('users.json');
-
-if (fileExists) {
-  const data = fs.readFileSync('users.json');
-  const usersFromDatabase = JSON.parse(data);
-  users = [...usersFromDatabase];
-}
 
 /******************* GET ALL USERS ******************
  *
@@ -21,7 +15,10 @@ if (fileExists) {
  * */
 
 export const getUsers = async (req, res) => {
-  if (!fileExists) {
+  //get all the user from the database
+  const users = await usersCollection.find().toArray();
+
+  if (users.length === 0) {
     res.status(404).json({ error: 'No users found' });
     return;
   }
@@ -63,19 +60,16 @@ export const addUser = async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, 12);
   const userId = crypto.randomUUID();
-  const newUser = { id: userId, name, password: hashedPassword };
-  const userExists = users.find((user) => user.name === name);
-  if (userExists)
+  const newUser = { _id: userId, name, password: hashedPassword };
+
+  // check if the user exists in the database
+  const isUserExist = await usersCollection.findOne({ name: name });
+  if (isUserExist)
     return res.status(400).json({ error: 'User name is already taken' });
 
-  if (!fileExists) {
-    users.push(newUser);
-    fs.writeFileSync('users.json', JSON.stringify([newUser]));
-    return;
-  }
+  // add the user to the database
+  const result = await usersCollection.insertOne(newUser);
 
-  users.push(newUser);
-  fs.writeFileSync('users.json', JSON.stringify(users));
   const newUserWithoutPassword = { ...newUser };
   delete newUserWithoutPassword.password;
   res.status(201).json(newUserWithoutPassword);
@@ -96,13 +90,16 @@ export const login = async (req, res) => {
     return;
   }
 
-  // check if the user exists
-  const user = users.find((user) => user.name === name);
-  if (!user) {
+  // check if the user exists in the database
+
+  const isUserExist = await usersCollection.findOne({ name: name });
+
+  if (!isUserExist) {
     res.status(400).json({ error: 'User does not exist' });
     return;
   }
 
+  const user = isUserExist;
   const passwordCorrect = await bcrypt.compare(password, user.password);
 
   if (!passwordCorrect) {

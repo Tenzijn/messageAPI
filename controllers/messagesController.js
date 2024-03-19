@@ -1,19 +1,13 @@
-import fs from 'fs';
+import client from '../db/db_connection.js';
 
 import jwt from 'jsonwebtoken';
-import { users } from './usersController.js';
 
-let messages = [];
+const db = client.db('messagingApp');
+const messagesCollection = db.collection('messages');
+
+const usersCollection = db.collection('users');
 
 const secret = 'my   secret   key';
-
-const fileExists = fs.existsSync('messages.json');
-
-if (fileExists) {
-  const data = fs.readFileSync('messages.json');
-  const messagesFromDatabase = JSON.parse(data);
-  messages = [...messagesFromDatabase];
-}
 
 /******************* GET ALL MESSAGES ******************
  *
@@ -23,16 +17,19 @@ if (fileExists) {
 export const getAllMessages = async (req, res) => {
   const sessionToken = req.headers.authorization.split(' ')[1];
   const decodedToken = jwt.verify(sessionToken, secret);
+  const sender = await usersCollection.findOne({ name: decodedToken.name });
+  const senderID = sender._id;
 
-  if (!fileExists) {
+  const allMessages = await messagesCollection.find().toArray();
+
+  if (allMessages.length === 0) {
     res.status(404).json({ error: 'No messages found' });
     return;
   }
 
-  const userMessages = messages.filter(
+  const userMessages = allMessages.filter(
     (message) =>
-      message.senderID === decodedToken.id ||
-      message.receiverID === decodedToken.id
+      message.senderID === senderID || message.receiverID === senderID.id
   );
   res.status(200).json(userMessages);
 };
@@ -46,7 +43,9 @@ export const sendMessage = async (req, res) => {
   const { receiverID, message } = req.body;
   const sessionToken = req.headers.authorization.split(' ')[1];
   const decodedToken = jwt.verify(sessionToken, secret);
-  const senderID = decodedToken.id;
+  const sender = await usersCollection.findOne({ name: decodedToken.name });
+  const senderID = sender._id;
+  const date = new Date();
 
   if (!receiverID || !message) {
     res
@@ -54,7 +53,10 @@ export const sendMessage = async (req, res) => {
       .json({ error: 'You must provide both receiverID and message' });
     return;
   }
-  const receiverExists = users.find((user) => user.id === receiverID);
+
+  // check if the receiver exists
+  const receiverExists = await usersCollection.findOne({ _id: receiverID });
+
   if (!receiverExists) {
     res.status(400).json({ error: 'Receiver does not exist' });
     return;
@@ -63,6 +65,7 @@ export const sendMessage = async (req, res) => {
     res.status(400).json({ error: 'Message is empty' });
     return;
   }
+
   if (receiverID === senderID) {
     res.status(400).json({ error: 'You can not send a message to yourself' });
     return;
@@ -70,12 +73,12 @@ export const sendMessage = async (req, res) => {
 
   const messageId = crypto.randomUUID();
 
-  const newMessage = { id: messageId, senderID, receiverID, message };
-  messages.push(newMessage);
+  const newMessage = { _id: messageId, date, senderID, receiverID, message };
 
-  fs.writeFileSync('messages.json', JSON.stringify(messages));
+  //write the new message to database
+  const result = await messagesCollection.insertOne(newMessage);
 
-  res.status(201).json(newMessage);
+  res.status(201).json(result);
 };
 
 /******************* UPDATE MESSAGE ******************
@@ -88,8 +91,17 @@ export const updateMessage = async (req, res) => {
   const messageId = req.params.id;
   const sessionToken = req.headers.authorization.split(' ')[1];
   const decodedToken = jwt.verify(sessionToken, secret);
-  const senderID = decodedToken.id;
-  const messageToUpdate = messages.find((message) => message.id === messageId);
+  const lastUpdateDate = new Date();
+
+  const sender = await usersCollection.findOne({ name: decodedToken.name });
+
+  const senderID = sender._id;
+
+  // find the message in the database
+
+  const messageToBeUpdate = await messagesCollection.findOne({
+    _id: messageId,
+  });
 
   if (!message) {
     res.status(400).json({ error: 'You must provide a message' });
@@ -101,19 +113,24 @@ export const updateMessage = async (req, res) => {
     return;
   }
 
-  if (!messageToUpdate) {
+  if (!messageToBeUpdate) {
     res.status(404).json({ error: 'Message not found' });
     return;
   }
 
-  if (messageToUpdate.senderID !== senderID) {
+  if (messageToBeUpdate.senderID !== senderID) {
     res.status(403).json({ error: 'You can not update this message' });
     return;
   }
   //don't have to push to messages array because we are updating the message in messageToUpdate which is a reference to the message in the messages array
-  messageToUpdate.message = message;
-  fs.writeFileSync('messages.json', JSON.stringify(messages));
-  res.status(200).json(messageToUpdate);
+
+  //update the message in the database
+  const result = await messagesCollection.updateOne(
+    { _id: messageId },
+    { $set: { message: message, updateDate: lastUpdateDate } }
+  );
+
+  res.status(200).json(result);
 };
 
 /******************* DELETE MESSAGE ******************
@@ -125,23 +142,28 @@ export const deleteMessage = async (req, res) => {
   const messageId = req.params.id;
   const sessionToken = req.headers.authorization.split(' ')[1];
   const decodedToken = jwt.verify(sessionToken, secret);
-  const senderID = decodedToken.id;
-  const messageToDelete = messages.find((message) => message.id === messageId);
 
-  if (!messageToDelete) {
+  const sender = await usersCollection.findOne({ name: decodedToken.name });
+
+  const senderID = sender._id;
+
+  // find the message in the database
+  const messageToBeDelete = await messagesCollection.findOne({
+    _id: messageId,
+  });
+
+  if (!messageToBeDelete) {
     res.status(404).json({ error: 'Message not found' });
     return;
   }
 
-  if (messageToDelete.senderID !== senderID) {
+  if (messageToBeDelete.senderID !== senderID) {
     res.status(403).json({ error: 'You can not delete this message' });
     return;
   }
 
-  const messageIndex = messages.indexOf(messageToDelete);
-  messages.splice(messageIndex, 1);
-  fs.writeFileSync('messages.json', JSON.stringify(messages));
-  res
-    .status(200)
-    .json({ message: `MessageID:  ${messageToDelete.id} deleted ` });
+  //delete the message from the database
+  const result = await messagesCollection.deleteOne({ _id: messageId });
+
+  res.status(200).json(result);
 };
