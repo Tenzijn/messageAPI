@@ -111,5 +111,5 @@ export const login = async (req, res) => {
     expiresIn: '1h',
   });
 
-  res.status(200).json({ token });
+  res.status(200).json({ token: token, userId: user._id, name: user.name });
 };
