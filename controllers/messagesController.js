@@ -29,7 +29,7 @@ export const getAllMessages = async (req, res) => {
 
   const userMessages = allMessages.filter(
     (message) =>
-      message.senderID === senderID || message.receiverID === senderID.id
+      message.senderID === senderID || message.receiverID === senderID
   );
   res.status(200).json(userMessages);
 };
